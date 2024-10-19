@@ -1,5 +1,8 @@
 package de.lenneflow.lenneflowterraformserver.controller;
 
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import de.lenneflow.lenneflowterraformserver.dto.ClusterDTO;
 import de.lenneflow.lenneflowterraformserver.enums.CloudProvider;
 import de.lenneflow.lenneflowterraformserver.enums.ClusterStatus;
@@ -19,6 +22,7 @@ import org.springframework.web.bind.annotation.*;
 import java.io.File;
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import java.util.UUID;
 
@@ -35,6 +39,7 @@ public class ServerController {
     private final CredentialRepository credentialRepository;
     private final ClusterRepository clusterRepository;
     private final AccessTokenRepository accessTokenRepository;
+    private final ObjectMapper mapper = new ObjectMapper();
 
     public ServerController(CredentialRepository credentialRepository, ClusterRepository clusterRepository, AccessTokenRepository accessTokenRepository) {
         this.credentialRepository = credentialRepository;
@@ -116,7 +121,18 @@ public class ServerController {
             switch (cloudProvider){
                 case AWS -> {
                     Util.setCredentialsEnvironmentVariables(cluster.getCloudProvider(), credentialRepository.findByUid(cluster.getCredentialId()));
-                    return Util.runCmdCommandAndGetOutput("aws eks get-token --cluster-name " + clusterName + " --region " + region);
+                    String output = Util.runCmdCommandAndGetOutput("aws eks get-token --output json --cluster-name " + clusterName + " --region " + region);
+                    JsonNode node = mapper.readTree(output);
+                    JsonNode statusNode = node.get("status");
+                    AccessToken accessToken = new AccessToken();
+                    accessToken.setUid(UUID.randomUUID().toString());
+                    accessToken.setDescription("Access token for " + clusterName);
+                    accessToken.setToken(statusNode.get("token").toString());
+                    accessToken.setExpiration(LocalDateTime.parse(statusNode.get("expirationTimestamp").toString(), DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'")));
+                    AccessToken savedToken =accessTokenRepository.save(accessToken);
+                    cluster.setAccessTokenId(savedToken.getUid());
+                    clusterRepository.save(cluster);
+                    return savedToken.getToken();
                 }
                 case AZURE -> {
                     Util.setCredentialsEnvironmentVariables(cluster.getCloudProvider(), credentialRepository.findByUid(cluster.getCredentialId()));
