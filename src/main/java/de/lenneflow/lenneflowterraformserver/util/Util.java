@@ -20,48 +20,62 @@ public class Util {
 
     private Util(){}
 
-    public static String getTerraformBaseDir(){
-        String baseDir = System.getProperty("user.home")+ File.separator + "Terraform";
+    public static String getBaseDir(){
+        String baseDir = System.getProperty("user.home")+ File.separator + "Lenneflow";
         if(!new File(baseDir).exists() && !new File(baseDir).mkdirs()){
             throw new InternalServiceException("Unable to create directory " + baseDir);
         }
         return  baseDir;
     }
 
-    public static String getTerraformClusterDir(String clusterName, String region){
-        String  clusterDirPath = getTerraformBaseDir() + File.separator + region + File.separator + clusterName;
+    public static String getClusterDir(CloudProvider cloudProvider, String clusterName, String region){
+        String  clusterDirPath = getBaseDir() + File.separator + cloudProvider.toString().toLowerCase() + File.separator + region + File.separator + clusterName;
         if(!new File(clusterDirPath).exists() && !new File(clusterDirPath).mkdirs()){
             throw new InternalServiceException("Unable to create directory " + clusterDirPath);
         }
         return  clusterDirPath;
     }
 
-    public static String getTerraformSubDir(CloudProvider cloudProvider) {
-        switch(cloudProvider){
-            case AWS -> {
-                return "aws";
+    public static String gitCloneOrUpdate(String repositoryUrl, String branch){
+        try {
+            String terraformDir = getBaseDir() + File.separator + "Terraform";
+            if(!new File(terraformDir).exists() && new File(terraformDir).mkdirs()){
+                Git.cloneRepository().setURI(repositoryUrl).setBranch(branch).setDirectory(new File(terraformDir)).call();
+            }else{
+                Git git = new Git(new FileRepository(terraformDir));
+                git.pull();
+                git.close();
             }
-            case AZURE -> {
-                return "azure";
-            }
-            case GOOGLE -> {
-                return "google";
-            }
-            default -> throw new InternalServiceException("Unknown cloud provider " + cloudProvider);
-
+            return terraformDir;
+        } catch (Exception e) {
+            throw new InternalServiceException(e.getMessage());
         }
     }
 
-
-    public static String gitCloneOrUpdate(String repositoryUrl, String branch, String clusterName, String region){
+    public static String getOrCreateClusterDir(CloudProvider cloudProvider, String clusterName, String region){
         try {
-            String clusterDirPath = getTerraformClusterDir(clusterName, region);
-            if(FileUtils.isEmptyDirectory(new File(clusterDirPath))){
-                Git.cloneRepository().setURI(repositoryUrl).setBranch(branch).setDirectory(new File(clusterDirPath)).call();
-            }else{
-                new Git(new FileRepository(clusterDirPath)).pull();
+            String terraformDir = getBaseDir() + File.separator + "Terraform";
+            String clusterDir = getClusterDir(cloudProvider, clusterName, region);
+            if(FileUtils.isEmptyDirectory(new File(clusterDir))){
+                switch(cloudProvider){
+                    case AWS -> {
+                        String source = terraformDir + File.separator + "aws";
+                        FileUtils.copyDirectory(new File(source), new File(clusterDir));
+                    }
+                    case AZURE -> {
+                        String source = terraformDir + File.separator + "azure";
+                        FileUtils.copyDirectory(new File(source), new File(clusterDir));
+                    }
+                    case GOOGLE -> {
+                        String source = terraformDir + File.separator + "google";
+                        FileUtils.copyDirectory(new File(source), new File(clusterDir));
+                    }
+                    default -> throw new InternalServiceException("Unknown cloud provider " + cloudProvider);
+
+                }
             }
-            return clusterDirPath;
+            return clusterDir;
+
         } catch (Exception e) {
             throw new InternalServiceException(e.getMessage());
         }
@@ -78,16 +92,17 @@ public class Util {
         StringBuilder output = new StringBuilder();
         ProcessBuilder processBuilder = new ProcessBuilder();
         processBuilder.command(command.split(" "));
+
         Process process = processBuilder.start();
-        // Capture the command output
         BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+
         String line;
         while ((line = reader.readLine()) != null) {
             output.append(line).append("\n");
         }
         int exitCode = process.waitFor();
         if(exitCode != 0){
-            throw new IOException("Exit code: " + exitCode);
+            throw new IOException("Exit code: " + exitCode + "\n" + process.getErrorStream().toString());
         }
         return output.toString();
     }
@@ -99,7 +114,7 @@ public class Util {
             processBuilder.command(command.split(" "));
 
             // Set the Terraform working directory (replace with your directory)
-            processBuilder.directory(new java.io.File(terraformFilesPath));
+            processBuilder.directory(new File(terraformFilesPath));
             Process process = processBuilder.start();
 
             // Capture the command output
@@ -153,12 +168,10 @@ public class Util {
         try {
             switch(cloudProvider){
                 case AWS -> {
-                    runCmdCommand("aws configure set acces_key_id " + credential.getAccessKey());
-                    runCmdCommand("aws configure set secret_acces_key " + credential.getSecretKey());
+                    runCmdCommand("cmd.exe /c aws configure set aws_access_key_id " + credential.getAccessKey());
+                    runCmdCommand("cmd.exe /c aws configure set aws_secret_access_key " + credential.getSecretKey());
                 }
-                case AZURE -> {
-                    runCmdCommand("az login --service-principal --username " +credential.getAccessKey() + " --password " + credential.getSecretKey() + " --tenant " +credential.getAccountId());
-                }
+                case AZURE -> runCmdCommand("az login --service-principal --username " +credential.getAccessKey() + " --password " + credential.getSecretKey() + " --tenant " +credential.getAccountId());
                 default -> throw new InternalServiceException("Unsupported cloud provider " + cloudProvider);
             }
         } catch (IOException | InterruptedException e) {
