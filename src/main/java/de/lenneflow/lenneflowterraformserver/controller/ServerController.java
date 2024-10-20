@@ -114,7 +114,6 @@ public class ServerController {
     }
 
 
-
     @GetMapping("/access-token/provider/{cloudProvider}/cluster/{clusterName}/region/{region}")
     public String getConnectionToken(@PathVariable String clusterName, @PathVariable String region, @PathVariable String cloudProvider){
         Cluster cluster = clusterRepository.findByCloudProviderAndClusterNameAndRegion(CloudProvider.valueOf(cloudProvider.toUpperCase()), clusterName, region);
@@ -136,16 +135,7 @@ public class ServerController {
                     String output = Util.runCmdCommandAndGetOutput("aws eks get-token --profile default --output json --cluster-name " + clusterName + " --region " + region);
                     TokenDTO tokenDTO = mapper.readValue(output.trim(), TokenDTO.class);
                     Map<String, String> statusNode = tokenDTO.getStatus();
-                    AccessToken accessToken = new AccessToken();
-                    accessToken.setUid(UUID.randomUUID().toString());
-                    accessToken.setDescription("Access token for " + clusterName);
-                    accessToken.setToken(statusNode.get("token"));
-                    DateTimeFormatter formatter = DateTimeFormatter.ISO_INSTANT.withZone(ZoneId.systemDefault());
-                    ZonedDateTime zonedDateTime = ZonedDateTime.parse(statusNode.get("expirationTimestamp"), formatter);
-                    accessToken.setExpiration(zonedDateTime.toLocalDateTime());
-                    AccessToken savedToken = accessTokenRepository.save(accessToken);
-                    cluster.setAccessTokenId(savedToken.getUid());
-                    clusterRepository.save(cluster);
+                    AccessToken savedToken = createAndSaveAWSAccessToken(statusNode, cluster);
                     return savedToken.getToken();
                 }
                 case AZURE -> {
@@ -203,6 +193,20 @@ public class ServerController {
             credentialRepository.delete(credentialRepository.findByUid(cluster.getCredentialId()));
         }
         clusterRepository.delete(cluster);
+    }
+
+    private AccessToken createAndSaveAWSAccessToken(Map<String, String> statusNode, Cluster cluster) {
+        AccessToken accessToken = new AccessToken();
+        accessToken.setUid(UUID.randomUUID().toString());
+        accessToken.setDescription("Access token for " + cluster.getClusterName());
+        accessToken.setToken(statusNode.get("token"));
+        DateTimeFormatter formatter = DateTimeFormatter.ISO_INSTANT.withZone(ZoneId.systemDefault());
+        ZonedDateTime zonedDateTime = ZonedDateTime.parse(statusNode.get("expirationTimestamp"), formatter);
+        accessToken.setExpiration(zonedDateTime.toLocalDateTime());
+        AccessToken savedToken = accessTokenRepository.save(accessToken);
+        cluster.setAccessTokenId(savedToken.getUid());
+        clusterRepository.save(cluster);
+        return savedToken;
     }
 
 }
