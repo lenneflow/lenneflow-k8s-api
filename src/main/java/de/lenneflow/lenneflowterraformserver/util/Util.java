@@ -20,6 +20,11 @@ public class Util {
 
     private Util(){}
 
+    /**
+     * This function return the base dir of all terraform files that will be used to manage
+     * the kubernetes infrastructure
+     * @return the path of the directory
+     */
     public static String getBaseDir(){
         String baseDir = System.getProperty("user.home")+ File.separator + "Lenneflow";
         if(!new File(baseDir).exists() && !new File(baseDir).mkdirs()){
@@ -28,6 +33,14 @@ public class Util {
         return  baseDir;
     }
 
+    /**
+     * To terraform files needed to create a new kubernetes cluster will be saved in a separate directory. In this directory the state
+     * of the created infrastructure will also be saved. This function creates this directory and return the path.
+     * @param cloudProvider
+     * @param clusterName
+     * @param region
+     * @return the directory path
+     */
     public static String getClusterDir(CloudProvider cloudProvider, String clusterName, String region){
         String  clusterDirPath = getBaseDir() + File.separator + cloudProvider.toString().toLowerCase() + File.separator + region + File.separator + clusterName;
         if(!new File(clusterDirPath).exists() && !new File(clusterDirPath).mkdirs()){
@@ -36,6 +49,13 @@ public class Util {
         return  clusterDirPath;
     }
 
+    /**
+     * This function will clone the terraform files from GitHub. If the files are already cloned,
+     * it will do a pull to get the all the changes.
+     * @param repositoryUrl
+     * @param branch
+     * @return the path of the directory
+     */
     public static String gitCloneOrUpdate(String repositoryUrl, String branch){
         try {
             String terraformDir = getBaseDir() + File.separator + "Terraform";
@@ -52,7 +72,14 @@ public class Util {
         }
     }
 
-    public static String getOrCreateClusterDir(CloudProvider cloudProvider, String clusterName, String region){
+    /**
+     * Copies the needed terraform files to the cluster directory if it is empty.
+     * @param cloudProvider
+     * @param clusterName
+     * @param region
+     * @return the path of the cluster directory
+     */
+    public static String initializeClusterDir(CloudProvider cloudProvider, String clusterName, String region){
         try {
             String terraformDir = getBaseDir() + File.separator + "Terraform";
             String clusterDir = getClusterDir(cloudProvider, clusterName, region);
@@ -81,6 +108,13 @@ public class Util {
         }
     }
 
+    /**
+     * Runs a command line command and return the exit code
+     * @param command
+     * @return exit code
+     * @throws IOException
+     * @throws InterruptedException
+     */
     public static int runCmdCommand(String command) throws IOException, InterruptedException {
         ProcessBuilder processBuilder = new ProcessBuilder();
         processBuilder.command(command.split(" "));
@@ -88,6 +122,13 @@ public class Util {
         return process.waitFor();
     }
 
+    /**
+     * Runs a command line command and return the output of the run.
+     * @param command
+     * @return String output of run
+     * @throws IOException
+     * @throws InterruptedException
+     */
     public static String runCmdCommandAndGetOutput(String command) throws IOException, InterruptedException {
         StringBuilder output = new StringBuilder();
         ProcessBuilder processBuilder = new ProcessBuilder();
@@ -108,7 +149,14 @@ public class Util {
     }
 
 
-    // Method to execute Terraform commands
+    /**
+     * Executes a terraform command line command
+     * @param command
+     * @param terraformFilesPath
+     * @return the exit code
+     * @throws IOException
+     * @throws InterruptedException
+     */
     public static int runTerraformCommand(String command, String terraformFilesPath) throws IOException, InterruptedException {
             ProcessBuilder processBuilder = new ProcessBuilder();
             processBuilder.command(command.split(" "));
@@ -131,7 +179,13 @@ public class Util {
 
     }
 
-    public static Map<String, String> createVariablesMap(ClusterDTO clusterDTO) {
+    /**
+     * This method creates a map containing all variables and the values for AWS kubernetes.
+     * The map will be used to create the tfvars file.
+     * @param clusterDTO
+     * @return the variables map
+     */
+    public static Map<String, String> createTfvarsVariablesMap(ClusterDTO clusterDTO) {
         Map<String, String> variables = new HashMap<>();
         variables.put("cluster_name", clusterDTO.getClusterName());
         variables.put("region", clusterDTO.getRegion());
@@ -148,6 +202,11 @@ public class Util {
     }
 
 
+    /**
+     * Uses a variables map to create the tfvars file.
+     * @param dirPath
+     * @param variables
+     */
     public static void createTfvarsFile(String dirPath, Map<String, String> variables) {
         File dir = new File(dirPath);
         dir.setWritable(true);
@@ -164,6 +223,12 @@ public class Util {
         }
     }
 
+    /**
+     * In order to run some command line commands, it is necessary to set the credentials as environment variables
+     * This method does the job
+     * @param cloudProvider
+     * @param credential
+     */
     public static void setCredentialsEnvironmentVariables(CloudProvider cloudProvider, Credential credential) {
         try {
             switch(cloudProvider){

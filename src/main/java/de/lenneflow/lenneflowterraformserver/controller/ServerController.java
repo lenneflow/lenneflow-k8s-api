@@ -3,6 +3,7 @@ package de.lenneflow.lenneflowterraformserver.controller;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import de.lenneflow.lenneflowterraformserver.dto.ClusterDTO;
+import de.lenneflow.lenneflowterraformserver.dto.NodeGroupDTO;
 import de.lenneflow.lenneflowterraformserver.dto.TokenDTO;
 import de.lenneflow.lenneflowterraformserver.enums.CloudProvider;
 import de.lenneflow.lenneflowterraformserver.enums.ClusterStatus;
@@ -29,7 +30,7 @@ import java.util.Map;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/terraform")
+@RequestMapping("/api/kubernetes")
 public class ServerController {
 
     @Value("${git.repository.url}")
@@ -50,55 +51,49 @@ public class ServerController {
         mapper.configure(JsonParser.Feature.AUTO_CLOSE_SOURCE, true);
     }
 
-
-    @PostMapping("/cluster")
-    public void createOrUpdateCluster(@RequestBody ClusterDTO clusterDTO) {
+    /**
+     * Create a new Cluster on the cloud
+     *
+     * @param clusterDTO
+     */
+    @PostMapping("/cluster/create")
+    public Cluster createOrUpdateCluster(@RequestBody ClusterDTO clusterDTO) {
         Validator.validateCluster(clusterDTO);
         Cluster cluster = createDBTables(clusterDTO);
         Util.gitCloneOrUpdate(repositoryUrl, branch);
-        String clusterDir = Util.getOrCreateClusterDir(clusterDTO.getCloudProvider(), clusterDTO.getClusterName(), clusterDTO.getRegion());
-        Map<String, String> variablesMap = Util.createVariablesMap(clusterDTO);
+        String clusterDir = Util.initializeClusterDir(clusterDTO.getCloudProvider(), clusterDTO.getClusterName(), clusterDTO.getRegion());
+        Map<String, String> variablesMap = Util.createTfvarsVariablesMap(clusterDTO);
         Util.createTfvarsFile(clusterDir, variablesMap);
-        new Thread(() -> {
-            try {
-                updateClusterStatus(cluster, ClusterStatus.INITIALIZING);
-                if(Util.runTerraformCommand("terraform init", clusterDir) != 0){
-                    updateClusterStatus(cluster, ClusterStatus.ERROR);
-                    throw new InternalServiceException("terraform init failed");
-                }
-                updateClusterStatus(cluster, ClusterStatus.PLANING);
-                if(Util.runTerraformCommand("terraform plan", clusterDir) != 0){
-                    updateClusterStatus(cluster, ClusterStatus.ERROR);
-                    throw new InternalServiceException("terraform plan failed");
-                }
-                updateClusterStatus(cluster, ClusterStatus.CREATING);
-                if(Util.runTerraformCommand("terraform apply -auto-approve", clusterDir) != 0){
-                    updateClusterStatus(cluster, ClusterStatus.ERROR);
-                    throw new InternalServiceException("terraform apply failed");
-                }
-                updateClusterStatus(cluster, ClusterStatus.CREATED);
-            } catch (Exception e) {
-                Thread.currentThread().interrupt();
-                updateClusterStatus(cluster, ClusterStatus.ERROR);
-                throw new InternalServiceException(e.getMessage());
-            }
-        }).start();
+        new Thread(() -> executeTerraformCreationCommands(cluster, clusterDir, true)).start();
+        return cluster;
     }
+
+    @PostMapping("/cluster/update")
+    public Cluster updateNodeGroup(@RequestBody NodeGroupDTO nodeGroupDTO) {
+        String clusterDir = Util.initializeClusterDir(nodeGroupDTO.getCloudProvider(), nodeGroupDTO.getClusterName(), nodeGroupDTO.getRegion());
+        Cluster cluster = clusterRepository.findByCloudProviderAndClusterNameAndRegion(nodeGroupDTO.getCloudProvider(), nodeGroupDTO.getClusterName(), nodeGroupDTO.getRegion());
+        ClusterDTO clusterDTO = createClusterDTO(cluster, nodeGroupDTO);
+        Map<String, String> variablesMap = Util.createTfvarsVariablesMap(clusterDTO);
+        Util.createTfvarsFile(clusterDir, variablesMap);
+        new Thread(() -> executeTerraformCreationCommands(cluster, clusterDir, false)).start();
+        return cluster;
+    }
+
 
     @DeleteMapping("/provider/{cloudProvider}/cluster/{clusterName}/region/{region}")
     public void deleteCluster(@PathVariable String clusterName, @PathVariable String region, @PathVariable String cloudProvider) {
-        String clusterDir = Util.getOrCreateClusterDir(CloudProvider.valueOf(cloudProvider), clusterName, region);
+        String clusterDir = Util.initializeClusterDir(CloudProvider.valueOf(cloudProvider), clusterName, region);
         Cluster cluster = clusterRepository.findByCloudProviderAndClusterNameAndRegion(CloudProvider.valueOf(cloudProvider.toUpperCase()), clusterName, region);
         new Thread(() -> {
             try {
                 updateClusterStatus(cluster, ClusterStatus.PLANING_DELETE);
-                if(Util.runTerraformCommand("terraform plan -destroy", clusterDir) != 0){
+                if (Util.runTerraformCommand("terraform plan -destroy", clusterDir) != 0) {
                     updateClusterStatus(cluster, ClusterStatus.ERROR);
                     throw new InternalServiceException("terraform plan failed");
                 }
 
                 updateClusterStatus(cluster, ClusterStatus.DELETING);
-                if(Util.runTerraformCommand("terraform apply -destroy -auto-approve -input=false", clusterDir) != 0){
+                if (Util.runTerraformCommand("terraform apply -destroy -auto-approve -input=false", clusterDir) != 0) {
                     updateClusterStatus(cluster, ClusterStatus.ERROR);
                     throw new InternalServiceException("terraform destroy failed");
                 }
@@ -113,22 +108,20 @@ public class ServerController {
 
     }
 
-
     @GetMapping("/access-token/provider/{cloudProvider}/cluster/{clusterName}/region/{region}")
-    public String getConnectionToken(@PathVariable String clusterName, @PathVariable String region, @PathVariable String cloudProvider){
+    public String getConnectionToken(@PathVariable String clusterName, @PathVariable String region, @PathVariable String cloudProvider) {
         Cluster cluster = clusterRepository.findByCloudProviderAndClusterNameAndRegion(CloudProvider.valueOf(cloudProvider.toUpperCase()), clusterName, region);
         AccessToken token = accessTokenRepository.findByUid(cluster.getAccessTokenId());
 
-        if(token != null){
-            if(token.getExpiration().isAfter(LocalDateTime.now())){
+        if (token != null) {
+            if (token.getExpiration().isAfter(LocalDateTime.now())) {
                 return token.getToken();
-            }
-            else {
+            } else {
                 accessTokenRepository.delete(token);
             }
         }
         try {
-            switch (CloudProvider.valueOf(cloudProvider.toUpperCase())){
+            switch (CloudProvider.valueOf(cloudProvider.toUpperCase())) {
                 case AWS -> {
                     Credential credential = credentialRepository.findByUid(cluster.getCredentialId());
                     Util.setCredentialsEnvironmentVariables(cluster.getCloudProvider(), credential);
@@ -184,12 +177,37 @@ public class ServerController {
         return clusterRepository.save(cluster);
     }
 
+    private void executeTerraformCreationCommands(Cluster cluster, String clusterDir, boolean init) {
+        try {
+            updateClusterStatus(cluster, ClusterStatus.INITIALIZING);
+            if (init && Util.runTerraformCommand("terraform init", clusterDir) != 0) {
+                updateClusterStatus(cluster, ClusterStatus.ERROR);
+                throw new InternalServiceException("terraform init failed");
+            }
+            updateClusterStatus(cluster, ClusterStatus.PLANING);
+            if (Util.runTerraformCommand("terraform plan", clusterDir) != 0) {
+                updateClusterStatus(cluster, ClusterStatus.ERROR);
+                throw new InternalServiceException("terraform plan failed");
+            }
+            updateClusterStatus(cluster, ClusterStatus.CREATING);
+            if (Util.runTerraformCommand("terraform apply -auto-approve", clusterDir) != 0) {
+                updateClusterStatus(cluster, ClusterStatus.ERROR);
+                throw new InternalServiceException("terraform apply failed");
+            }
+            updateClusterStatus(cluster, ClusterStatus.CREATED);
+        } catch (Exception e) {
+            Thread.currentThread().interrupt();
+            updateClusterStatus(cluster, ClusterStatus.ERROR);
+            throw new InternalServiceException(e.getMessage());
+        }
+    }
+
     private void deleteDirectoryAndDBTables(String terraformDir, Cluster cluster) throws IOException {
         FileUtils.deleteDirectory(new File(terraformDir));
-        if(accessTokenRepository.findByUid(cluster.getAccessTokenId()) != null){
+        if (accessTokenRepository.findByUid(cluster.getAccessTokenId()) != null) {
             accessTokenRepository.delete(accessTokenRepository.findByUid(cluster.getAccessTokenId()));
         }
-        if(credentialRepository.findByUid(cluster.getCredentialId()) != null){
+        if (credentialRepository.findByUid(cluster.getCredentialId()) != null) {
             credentialRepository.delete(credentialRepository.findByUid(cluster.getCredentialId()));
         }
         clusterRepository.delete(cluster);
@@ -207,6 +225,23 @@ public class ServerController {
         cluster.setAccessTokenId(savedToken.getUid());
         clusterRepository.save(cluster);
         return savedToken;
+    }
+
+    private ClusterDTO createClusterDTO(Cluster cluster, NodeGroupDTO nodeGroupDTO) {
+        Credential credential = credentialRepository.findByUid(cluster.getCredentialId());
+        ClusterDTO clusterDTO = new ClusterDTO();
+        clusterDTO.setClusterName(cluster.getClusterName());
+        clusterDTO.setRegion(cluster.getRegion());
+        clusterDTO.setCloudProvider(cluster.getCloudProvider());
+        clusterDTO.setAccessKey(credential.getAccessKey());
+        clusterDTO.setAmiType(cluster.getAmiType());
+        clusterDTO.setInstanceType(cluster.getInstanceType());
+        clusterDTO.setSecretKey(credential.getSecretKey());
+        clusterDTO.setKubernetesVersion(cluster.getKubernetesVersion());
+        clusterDTO.setDesiredNodeCount(nodeGroupDTO.getDesiredNodeCount());
+        clusterDTO.setMaximumNodeCount(nodeGroupDTO.getMaximumNodeCount());
+        clusterDTO.setMinimumNodeCount(nodeGroupDTO.getMinimumNodeCount());
+        return clusterDTO;
     }
 
 }
