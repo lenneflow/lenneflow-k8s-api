@@ -30,6 +30,8 @@ public class ClusterDTO {
 
     private String amiType;
 
+    private String accountId;
+
     private String accessKey;
 
     private String secretKey;

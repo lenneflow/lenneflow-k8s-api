@@ -175,8 +175,27 @@ public class Util {
             int exitCode = process.waitFor();
             logger.info("Command executed with exit code: {}", exitCode);
             return exitCode;
+    }
 
+    public static String runTerraformCommandAndGetOutput(String command, String terraformFilesPath) throws IOException, InterruptedException {
+        ProcessBuilder processBuilder = new ProcessBuilder();
+        processBuilder.command(command.split(" "));
 
+        // Set the Terraform working directory (replace with your directory)
+        processBuilder.directory(new File(terraformFilesPath));
+        Process process = processBuilder.start();
+        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+
+        StringBuilder output = new StringBuilder();
+        String line;
+        while ((line = reader.readLine()) != null) {
+            output.append(line).append("\n");
+        }
+        int exitCode = process.waitFor();
+        if(exitCode != 0){
+            throw new IOException("Exit code: " + exitCode + "\n" + process.getErrorStream().toString());
+        }
+        return output.toString();
     }
 
     /**

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import de.lenneflow.lenneflowterraformserver.dto.ClusterDTO;
 import de.lenneflow.lenneflowterraformserver.dto.NodeGroupDTO;
+import de.lenneflow.lenneflowterraformserver.dto.OutputDTO;
 import de.lenneflow.lenneflowterraformserver.dto.TokenDTO;
 import de.lenneflow.lenneflowterraformserver.enums.CloudProvider;
 import de.lenneflow.lenneflowterraformserver.enums.ClusterStatus;
@@ -53,8 +54,6 @@ public class ServerController {
 
     /**
      * Create a new Cluster on the cloud
-     *
-     * @param clusterDTO
      */
     @PostMapping("/cluster/create")
     public Cluster createOrUpdateCluster(@RequestBody ClusterDTO clusterDTO) {
@@ -79,8 +78,13 @@ public class ServerController {
         return cluster;
     }
 
+    @GetMapping("/cluster/{clusterName}/provider/{cloudProvider}/region/{region}")
+    public Cluster getCluster(@PathVariable String clusterName, @PathVariable String region, @PathVariable String cloudProvider) {
+        return clusterRepository.findByCloudProviderAndClusterNameAndRegion(CloudProvider.valueOf(clusterName), clusterName, region);
+    }
 
-    @DeleteMapping("/provider/{cloudProvider}/cluster/{clusterName}/region/{region}")
+
+    @DeleteMapping("/cluster/{clusterName}/provider/{cloudProvider}/region/{region}")
     public void deleteCluster(@PathVariable String clusterName, @PathVariable String region, @PathVariable String cloudProvider) {
         String clusterDir = Util.initializeClusterDir(CloudProvider.valueOf(cloudProvider), clusterName, region);
         Cluster cluster = clusterRepository.findByCloudProviderAndClusterNameAndRegion(CloudProvider.valueOf(cloudProvider.toUpperCase()), clusterName, region);
@@ -195,11 +199,28 @@ public class ServerController {
                 throw new InternalServiceException("terraform apply failed");
             }
             updateClusterStatus(cluster, ClusterStatus.CREATED);
+            updateClusterOutputData(cluster, clusterDir);
         } catch (Exception e) {
             Thread.currentThread().interrupt();
             updateClusterStatus(cluster, ClusterStatus.ERROR);
             throw new InternalServiceException(e.getMessage());
         }
+    }
+
+    private void updateClusterOutputData(Cluster cluster, String clusterDir) {
+        try {
+            String jsonOutput = Util.runTerraformCommandAndGetOutput("terraform output -json", clusterDir);
+            OutputDTO outputDTO = mapper.readValue(jsonOutput.trim(), OutputDTO.class);
+            cluster.setApiServerEndpoint(outputDTO.getCluster_endpoint().getValue());
+            cluster.setCaCertificate(outputDTO.getCluster_ca_certificate().getValue());
+            clusterRepository.save(cluster);
+        } catch (Exception e) {
+            Thread.currentThread().interrupt();
+            updateClusterStatus(cluster, ClusterStatus.ERROR);
+            throw new InternalServiceException(e.getMessage());
+        }
+
+
     }
 
     private void deleteDirectoryAndDBTables(String terraformDir, Cluster cluster) throws IOException {

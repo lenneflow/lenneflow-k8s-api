@@ -41,6 +41,10 @@ public class Cluster {
 
     private String amiType;
 
+    private String apiServerEndpoint;
+
+    private String caCertificate;
+
     private String accessTokenId;
 
 }
