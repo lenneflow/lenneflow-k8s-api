@@ -80,7 +80,7 @@ public class ServerController {
 
     @GetMapping("/cluster/{clusterName}/provider/{cloudProvider}/region/{region}")
     public Cluster getCluster(@PathVariable String clusterName, @PathVariable String region, @PathVariable String cloudProvider) {
-        return clusterRepository.findByCloudProviderAndClusterNameAndRegion(CloudProvider.valueOf(clusterName), clusterName, region);
+        return clusterRepository.findByCloudProviderAndClusterNameAndRegion(CloudProvider.valueOf(cloudProvider), clusterName, region);
     }
 
 
@@ -149,9 +149,8 @@ public class ServerController {
     }
 
     private void updateClusterStatus(Cluster cluster, ClusterStatus clusterStatus) {
-        Cluster found = clusterRepository.findByUid(cluster.getUid());
-        found.setStatus(clusterStatus);
-        clusterRepository.save(found);
+        cluster.setStatus(clusterStatus);
+        clusterRepository.save(cluster);
     }
 
     private Cluster createDBTables(ClusterDTO clusterDTO) {
@@ -173,7 +172,7 @@ public class ServerController {
         cluster.setAmiType(clusterDTO.getAmiType());
         cluster.setCredentialId(savedCredential.getUid());
         cluster.setInstanceType(clusterDTO.getInstanceType());
-        cluster.setStatus(ClusterStatus.CREATING);
+        cluster.setStatus(ClusterStatus.NEW);
         cluster.setKubernetesVersion(clusterDTO.getKubernetesVersion());
         cluster.setMaximumNodeCount(clusterDTO.getMaximumNodeCount());
         cluster.setMinimumNodeCount(clusterDTO.getMinimumNodeCount());
