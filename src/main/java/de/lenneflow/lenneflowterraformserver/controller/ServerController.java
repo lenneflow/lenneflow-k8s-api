@@ -112,15 +112,16 @@ public class ServerController {
 
     }
 
-    @GetMapping("/access-token/provider/{cloudProvider}/cluster/{clusterName}/region/{region}")
-    public String getConnectionToken(@PathVariable String clusterName, @PathVariable String region, @PathVariable String cloudProvider) {
+    @GetMapping("/access-token/cluster/{clusterName}/provider/{cloudProvider}/region/{region}")
+    public AccessToken getConnectionToken(@PathVariable String clusterName, @PathVariable String region, @PathVariable String cloudProvider) {
         Cluster cluster = clusterRepository.findByCloudProviderAndClusterNameAndRegion(CloudProvider.valueOf(cloudProvider.toUpperCase()), clusterName, region);
         AccessToken token = accessTokenRepository.findByUid(cluster.getAccessTokenId());
 
         if (token != null) {
             if (token.getExpiration().isAfter(LocalDateTime.now())) {
-                return token.getToken();
+                return token;
             } else {
+                //delete expired token
                 accessTokenRepository.delete(token);
             }
         }
@@ -132,12 +133,12 @@ public class ServerController {
                     String output = Util.runCmdCommandAndGetOutput("aws eks get-token --profile default --output json --cluster-name " + clusterName + " --region " + region);
                     TokenDTO tokenDTO = mapper.readValue(output.trim(), TokenDTO.class);
                     Map<String, String> statusNode = tokenDTO.getStatus();
-                    AccessToken savedToken = createAndSaveAWSAccessToken(statusNode, cluster);
-                    return savedToken.getToken();
+                    return createAndSaveAWSAccessToken(statusNode, cluster);
                 }
                 case AZURE -> {
                     Util.setCredentialsEnvironmentVariables(cluster.getCloudProvider(), credentialRepository.findByUid(cluster.getCredentialId()));
-                    return Util.runCmdCommandAndGetOutput("az aks get-token --cluster-name " + clusterName + " --region " + region);
+                    Util.runCmdCommandAndGetOutput("az aks get-token --cluster-name " + clusterName + " --region " + region);
+                    return null;
                 }
                 default -> throw new InternalServiceException("Unexpected value: " + cloudProvider);
             }
