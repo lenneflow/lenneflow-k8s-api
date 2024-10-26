@@ -9,6 +9,7 @@ import de.lenneflow.lenneflowterraformserver.dto.TokenDTO;
 import de.lenneflow.lenneflowterraformserver.enums.CloudProvider;
 import de.lenneflow.lenneflowterraformserver.enums.ClusterStatus;
 import de.lenneflow.lenneflowterraformserver.exception.InternalServiceException;
+import de.lenneflow.lenneflowterraformserver.exception.PayloadNotValidException;
 import de.lenneflow.lenneflowterraformserver.model.AccessToken;
 import de.lenneflow.lenneflowterraformserver.model.Cluster;
 import de.lenneflow.lenneflowterraformserver.model.Credential;
@@ -58,12 +59,16 @@ public class ServerController {
     @PostMapping("/cluster/create")
     public Cluster createOrUpdateCluster(@RequestBody ClusterDTO clusterDTO) {
         Validator.validateCluster(clusterDTO);
+        Cluster foundCluster = clusterRepository.findByCloudProviderAndClusterNameAndRegion( clusterDTO.getCloudProvider(), clusterDTO.getClusterName(), clusterDTO.getRegion());
+        if (foundCluster != null) {
+            throw new PayloadNotValidException("Cluster already exists");
+        }
         Cluster cluster = createDBTables(clusterDTO);
         Util.gitCloneOrUpdate(repositoryUrl, branch);
         String clusterDir = Util.initializeClusterDir(clusterDTO.getCloudProvider(), clusterDTO.getClusterName(), clusterDTO.getRegion());
         Map<String, String> variablesMap = Util.createTfvarsVariablesMap(clusterDTO);
         Util.createTfvarsFile(clusterDir, variablesMap);
-        new Thread(() -> executeTerraformCreationCommands(cluster, clusterDir, true)).start();
+        new Thread(() -> executeTerraformCreationCommands(cluster, clusterDir, false, null)).start();
         return cluster;
     }
 
@@ -74,7 +79,7 @@ public class ServerController {
         ClusterDTO clusterDTO = createClusterDTO(cluster, nodeGroupDTO);
         Map<String, String> variablesMap = Util.createTfvarsVariablesMap(clusterDTO);
         Util.createTfvarsFile(clusterDir, variablesMap);
-        new Thread(() -> executeTerraformCreationCommands(cluster, clusterDir, false)).start();
+        new Thread(() -> executeTerraformCreationCommands(cluster, clusterDir, true, nodeGroupDTO)).start();
         return cluster;
     }
 
@@ -135,11 +140,8 @@ public class ServerController {
                     Map<String, String> statusNode = tokenDTO.getStatus();
                     return createAndSaveAWSAccessToken(statusNode, cluster);
                 }
-                case AZURE -> {
-                    Util.setCredentialsEnvironmentVariables(cluster.getCloudProvider(), credentialRepository.findByUid(cluster.getCredentialId()));
-                    Util.runCmdCommandAndGetOutput("az aks get-token --cluster-name " + clusterName + " --region " + region);
-                    return null;
-                }
+                case AZURE -> throw new InternalServiceException("Azure cloud ist not yet supported");
+                case GOOGLE -> throw new InternalServiceException("GOOGLE cloud ist not yet supported");
                 default -> throw new InternalServiceException("Unexpected value: " + cloudProvider);
             }
 
@@ -181,28 +183,43 @@ public class ServerController {
         return clusterRepository.save(cluster);
     }
 
-    private void executeTerraformCreationCommands(Cluster cluster, String clusterDir, boolean init) {
+    private void executeTerraformCreationCommands(Cluster cluster, String clusterDir, boolean isUpdate, NodeGroupDTO nodeGroup) {
         try {
-            updateClusterStatus(cluster, ClusterStatus.INITIALIZING);
-            if (init && Util.runTerraformCommand("terraform init", clusterDir) != 0) {
-                updateClusterStatus(cluster, ClusterStatus.ERROR);
-                throw new InternalServiceException("terraform init failed");
+            if(isUpdate){
+                updateClusterStatus(cluster, ClusterStatus.INITIALIZING);
+                if (Util.runTerraformCommand("terraform refresh", clusterDir) != 0) {
+                    updateClusterStatus(cluster, ClusterStatus.ERROR);
+                    throw new InternalServiceException("terraform refresh failed");
+                }
+            }else{
+                if (Util.runTerraformCommand("terraform init", clusterDir) != 0) {
+                    updateClusterStatus(cluster, ClusterStatus.ERROR);
+                    throw new InternalServiceException("terraform init failed");
+                }
             }
             updateClusterStatus(cluster, ClusterStatus.PLANING);
+            Util.pause(2000);
             if (Util.runTerraformCommand("terraform plan", clusterDir) != 0) {
                 updateClusterStatus(cluster, ClusterStatus.ERROR);
                 throw new InternalServiceException("terraform plan failed");
             }
             updateClusterStatus(cluster, ClusterStatus.CREATING);
+            Util.pause(2000);
             if (Util.runTerraformCommand("terraform apply -auto-approve", clusterDir) != 0) {
                 updateClusterStatus(cluster, ClusterStatus.ERROR);
                 throw new InternalServiceException("terraform apply failed");
             }
             updateClusterStatus(cluster, ClusterStatus.CREATED);
             updateClusterOutputData(cluster, clusterDir);
+            if(isUpdate){
+                cluster.setMaximumNodeCount(nodeGroup.getMaximumNodeCount());
+                cluster.setMinimumNodeCount(nodeGroup.getMinimumNodeCount());
+                cluster.setDesiredNodeCount(nodeGroup.getDesiredNodeCount());
+                clusterRepository.save(cluster);
+            }
         } catch (Exception e) {
-            Thread.currentThread().interrupt();
             updateClusterStatus(cluster, ClusterStatus.ERROR);
+            Thread.currentThread().interrupt();
             throw new InternalServiceException(e.getMessage());
         }
     }

@@ -63,6 +63,7 @@ public class Util {
                 Git.cloneRepository().setURI(repositoryUrl).setBranch(branch).setDirectory(new File(terraformDir)).call();
             }else{
                 Git git = new Git(new FileRepository(terraformDir));
+                git.revert();
                 git.pull();
                 git.close();
             }
@@ -263,6 +264,14 @@ public class Util {
             throw new InternalServiceException(e.getMessage());
         }
 
+    }
+
+    public static void pause(int millis){
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
     }
 
 
