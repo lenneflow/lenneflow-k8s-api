@@ -100,7 +100,6 @@ public class ServerController {
                     updateClusterStatus(cluster, ClusterStatus.ERROR);
                     throw new InternalServiceException("terraform plan failed");
                 }
-
                 updateClusterStatus(cluster, ClusterStatus.DELETING);
                 if (Util.runTerraformCommand("terraform apply -destroy -auto-approve -input=false", clusterDir) != 0) {
                     updateClusterStatus(cluster, ClusterStatus.ERROR);
