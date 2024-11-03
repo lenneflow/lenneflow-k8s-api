@@ -15,6 +15,7 @@ public class OutputDTO {
     private OutputEntry cluster_endpoint;
     private OutputEntry cluster_ca_certificate;
     private OutputEntry cluster_security_group_id;
+    private OutputEntry ingress_hostname;
     private OutputEntry region;
     private OutputEntry cluster_name;
 

@@ -43,6 +43,8 @@ public class Cluster {
 
     private String apiServerEndpoint;
 
+    private String hostUrl;
+
     private String caCertificate;
 
     private String accessTokenId;

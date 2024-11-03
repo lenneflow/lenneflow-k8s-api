@@ -230,6 +230,7 @@ public class ServerController {
             OutputDTO outputDTO = mapper.readValue(jsonOutput.trim(), OutputDTO.class);
             cluster.setApiServerEndpoint(outputDTO.getCluster_endpoint().getValue());
             cluster.setCaCertificate(outputDTO.getCluster_ca_certificate().getValue());
+            cluster.setHostUrl(outputDTO.getIngress_hostname().getValue());
             clusterRepository.save(cluster);
         } catch (Exception e) {
             Thread.currentThread().interrupt();
