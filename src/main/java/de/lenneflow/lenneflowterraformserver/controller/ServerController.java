@@ -53,6 +53,20 @@ public class ServerController {
         mapper.configure(JsonParser.Feature.AUTO_CLOSE_SOURCE, true);
     }
 
+    @GetMapping("/ping")
+    public String ping() throws IOException, InterruptedException {
+        try {
+            if(Util.runCmdCommand("terraform -help") != 0){
+                return "Terraform is not installed or is not working properly";
+            }
+        }catch (Exception e){
+            return "Terraform is not installed or is not working properly";
+        }
+
+        return "Lenneflow Kubernetes API Server is working";
+    }
+
+
     /**
      * Create a new Cluster on the cloud
      */
