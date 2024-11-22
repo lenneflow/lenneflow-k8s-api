@@ -5,6 +5,7 @@ import de.lenneflow.lenneflowterraformserver.enums.CloudProvider;
 import de.lenneflow.lenneflowterraformserver.exception.InternalServiceException;
 import de.lenneflow.lenneflowterraformserver.model.Credential;
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang3.SystemUtils;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.internal.storage.file.FileRepository;
 import org.slf4j.Logger;
@@ -117,6 +118,9 @@ public class Util {
      * @throws InterruptedException
      */
     public static int runCmdCommand(String command) throws IOException, InterruptedException {
+        if(SystemUtils.IS_OS_WINDOWS){
+            command = "cmd.exe /c " + command;
+        }
         ProcessBuilder processBuilder = new ProcessBuilder();
         processBuilder.command(command.split(" "));
         Process process = processBuilder.start();
@@ -131,6 +135,9 @@ public class Util {
      * @throws InterruptedException
      */
     public static String runCmdCommandAndGetOutput(String command) throws IOException, InterruptedException {
+        if(SystemUtils.IS_OS_WINDOWS){
+            command = "cmd.exe /c " + command;
+        }
         StringBuilder output = new StringBuilder();
         ProcessBuilder processBuilder = new ProcessBuilder();
         processBuilder.command(command.split(" "));
@@ -253,8 +260,8 @@ public class Util {
         try {
             switch(cloudProvider){
                 case AWS -> {
-                    runCmdCommand("cmd.exe /c aws configure set aws_access_key_id " + credential.getAccessKey());
-                    runCmdCommand("cmd.exe /c aws configure set aws_secret_access_key " + credential.getSecretKey());
+                    runCmdCommand("aws configure set aws_access_key_id " + credential.getAccessKey());
+                    runCmdCommand("aws configure set aws_secret_access_key " + credential.getSecretKey());
                 }
                 case AZURE -> runCmdCommand("az login --service-principal --username " +credential.getAccessKey() + " --password " + credential.getSecretKey() + " --tenant " +credential.getAccountId());
                 default -> throw new InternalServiceException("Unsupported cloud provider " + cloudProvider);
