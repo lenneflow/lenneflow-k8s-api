@@ -3,11 +3,19 @@ package de.lenneflow.lenneflowterraformserver.util;
 import de.lenneflow.lenneflowterraformserver.dto.ClusterDTO;
 import de.lenneflow.lenneflowterraformserver.dto.NodeGroupDTO;
 import de.lenneflow.lenneflowterraformserver.exception.PayloadNotValidException;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockitoAnnotations;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.*;
 
 class ValidatorTest {
+
+    @BeforeEach
+    void setUp() {
+        MockitoAnnotations.openMocks(this);
+    }
 
     @Test
     void validateClusterThrowsExceptionWhenClusterNameIsNull() {
@@ -91,6 +99,36 @@ class ValidatorTest {
         nodeGroupDTO.setClusterName("test-cluster");
         nodeGroupDTO.setRegion("us-west-1");
         nodeGroupDTO.setMaximumNodeCount(0);
+
+        assertThrows(PayloadNotValidException.class, () -> Validator.validateNodeGroup(nodeGroupDTO));
+    }
+
+    @Test
+    void validateClusterDoesNotThrowExceptionWhenValid() {
+        ClusterDTO clusterDTO = new ClusterDTO();
+        clusterDTO.setClusterName("test-cluster");
+        clusterDTO.setRegion("us-west-1");
+
+        Validator.validateCluster(clusterDTO);
+    }
+
+    @Test
+    void validateNodeGroupDoesNotThrowExceptionWhenValid() {
+        NodeGroupDTO nodeGroupDTO = new NodeGroupDTO();
+        nodeGroupDTO.setClusterName("test-cluster");
+        nodeGroupDTO.setRegion("us-west-1");
+        nodeGroupDTO.setMaximumNodeCount(1);
+
+        Validator.validateNodeGroup(nodeGroupDTO);
+    }
+
+
+    @Test
+    void validateNodeGroupThrowsExceptionWhenMaximumNodeCountIsNegative() {
+        NodeGroupDTO nodeGroupDTO = new NodeGroupDTO();
+        nodeGroupDTO.setClusterName("test-cluster");
+        nodeGroupDTO.setRegion("us-west-1");
+        nodeGroupDTO.setMaximumNodeCount(-1);
 
         assertThrows(PayloadNotValidException.class, () -> Validator.validateNodeGroup(nodeGroupDTO));
     }
