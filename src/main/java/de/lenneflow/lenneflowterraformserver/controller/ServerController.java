@@ -88,6 +88,7 @@ public class ServerController {
 
     @PostMapping("/cluster/update")
     public Cluster updateNodeGroup(@RequestBody NodeGroupDTO nodeGroupDTO) {
+        Validator.validateNodeGroup(nodeGroupDTO);
         String clusterDir = Util.initializeClusterDir(nodeGroupDTO.getCloudProvider(), nodeGroupDTO.getClusterName(), nodeGroupDTO.getRegion());
         Cluster cluster = clusterRepository.findByCloudProviderAndClusterNameAndRegion(nodeGroupDTO.getCloudProvider(), nodeGroupDTO.getClusterName(), nodeGroupDTO.getRegion());
         ClusterDTO clusterDTO = createClusterDTO(cluster, nodeGroupDTO);
@@ -107,6 +108,9 @@ public class ServerController {
     public void deleteCluster(@PathVariable String clusterName, @PathVariable String region, @PathVariable String cloudProvider) {
         String clusterDir = Util.initializeClusterDir(CloudProvider.valueOf(cloudProvider), clusterName, region);
         Cluster cluster = clusterRepository.findByCloudProviderAndClusterNameAndRegion(CloudProvider.valueOf(cloudProvider.toUpperCase()), clusterName, region);
+        if(cluster == null){
+            throw new InternalServiceException("Cluster not found");
+        }
         new Thread(() -> {
             try {
                 updateClusterStatus(cluster, ClusterStatus.PLANING_DELETE);
