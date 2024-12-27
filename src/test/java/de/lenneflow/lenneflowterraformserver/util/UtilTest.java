@@ -5,14 +5,9 @@ import de.lenneflow.lenneflowterraformserver.enums.CloudProvider;
 import de.lenneflow.lenneflowterraformserver.exception.InternalServiceException;
 import de.lenneflow.lenneflowterraformserver.model.Credential;
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.lang3.SystemUtils;
-import org.eclipse.jgit.api.Git;
-import org.eclipse.jgit.internal.storage.file.FileRepository;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
-import org.mockito.MockedStatic;
-import org.mockito.Mockito;
-import org.slf4j.Logger;
 
 import java.io.File;
 import java.io.IOException;
@@ -20,8 +15,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
 
+@Order(10)
 class UtilTest {
 
     private static final String BASE_DIR = System.getProperty("user.home") + File.separator + "Lenneflow";

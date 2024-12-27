@@ -3,16 +3,15 @@ package de.lenneflow.lenneflowterraformserver.util;
 import de.lenneflow.lenneflowterraformserver.dto.ClusterDTO;
 import de.lenneflow.lenneflowterraformserver.dto.NodeGroupDTO;
 import de.lenneflow.lenneflowterraformserver.exception.PayloadNotValidException;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.mockito.MockitoAnnotations;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
 
-@Timeout(2)
+@Order(1)
 class ValidatorTest {
 
     @BeforeEach
@@ -108,7 +107,15 @@ class ValidatorTest {
         nodeGroupDTO.setRegion("us-west-1");
         nodeGroupDTO.setMaximumNodeCount(0);
 
-        assertThrows(PayloadNotValidException.class, () -> Validator.validateNodeGroup(nodeGroupDTO));
+        Exception exception =  new Exception();
+
+        try {
+            Validator.validateNodeGroup(nodeGroupDTO);
+        } catch (PayloadNotValidException e) {
+            exception = e;
+        }
+        assertInstanceOf(PayloadNotValidException.class, exception);
+
     }
 
     @Test

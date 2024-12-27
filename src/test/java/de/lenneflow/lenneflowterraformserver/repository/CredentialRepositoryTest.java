@@ -2,15 +2,16 @@ package de.lenneflow.lenneflowterraformserver.repository;
 
 import de.lenneflow.lenneflowterraformserver.model.Credential;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-import org.springframework.dao.InvalidDataAccessApiUsageException;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+@Order(40)
 class CredentialRepositoryTest {
 
     @Mock
