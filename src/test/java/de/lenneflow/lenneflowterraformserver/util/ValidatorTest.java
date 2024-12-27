@@ -3,13 +3,16 @@ package de.lenneflow.lenneflowterraformserver.util;
 import de.lenneflow.lenneflowterraformserver.dto.ClusterDTO;
 import de.lenneflow.lenneflowterraformserver.dto.NodeGroupDTO;
 import de.lenneflow.lenneflowterraformserver.exception.PayloadNotValidException;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.mockito.MockitoAnnotations;
 
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+@Timeout(2)
 class ValidatorTest {
 
     @BeforeEach
@@ -45,6 +48,7 @@ class ValidatorTest {
     }
 
     @Test
+    @Timeout(1)
     void validateClusterThrowsExceptionWhenRegionIsEmpty() {
         ClusterDTO clusterDTO = new ClusterDTO();
         clusterDTO.setClusterName("test-cluster");
@@ -54,26 +58,30 @@ class ValidatorTest {
     }
 
     @Test
+    @Timeout(1)
     void validateNodeGroupThrowsExceptionWhenClusterNameIsNull() {
         NodeGroupDTO nodeGroupDTO = new NodeGroupDTO();
         nodeGroupDTO.setClusterName(null);
         nodeGroupDTO.setRegion("us-west-1");
         nodeGroupDTO.setMaximumNodeCount(1);
 
-        assertThrows(PayloadNotValidException.class, () -> Validator.validateNodeGroup(nodeGroupDTO));
+        PayloadNotValidException exception = assertThrows(PayloadNotValidException.class, () -> Validator.validateNodeGroup(nodeGroupDTO));
+        assertFalse(exception.getMessage().isEmpty());
     }
 
     @Test
+    @Timeout(1)
     void validateNodeGroupThrowsExceptionWhenClusterNameIsEmpty() {
         NodeGroupDTO nodeGroupDTO = new NodeGroupDTO();
         nodeGroupDTO.setClusterName("");
         nodeGroupDTO.setRegion("us-west-1");
         nodeGroupDTO.setMaximumNodeCount(1);
-
+        Util.pause(500);
         assertThrows(PayloadNotValidException.class, () -> Validator.validateNodeGroup(nodeGroupDTO));
     }
 
     @Test
+    @Timeout(1)
     void validateNodeGroupThrowsExceptionWhenRegionIsNull() {
         NodeGroupDTO nodeGroupDTO = new NodeGroupDTO();
         nodeGroupDTO.setClusterName("test-cluster");
