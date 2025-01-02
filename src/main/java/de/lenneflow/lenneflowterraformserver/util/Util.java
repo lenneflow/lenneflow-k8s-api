@@ -55,7 +55,7 @@ public class Util {
      * @param repositoryUrl the url of the repository
      * @param branch the branch to clone
      */
-    public static void gitClone(String repositoryUrl, String branch){
+    public static String gitClone(String repositoryUrl, String branch){
         try {
             String terraformDir = getBaseDir() + File.separator + "Terraform";
             if(new File(terraformDir).exists()){
@@ -65,9 +65,11 @@ public class Util {
                 throw new InternalServiceException("Unable to create directory " + terraformDir);
             }
             Git.cloneRepository().setURI(repositoryUrl).setBranch(branch).setDirectory(new File(terraformDir)).call();
+            return terraformDir;
         } catch (Exception e) {
             throw new InternalServiceException(e.getMessage());
         }
+
     }
 
     /**
