@@ -78,7 +78,7 @@ public class ServerController {
             throw new PayloadNotValidException("Cluster already exists");
         }
         Cluster cluster = createDBTables(clusterDTO);
-        Util.gitCloneOrUpdate(repositoryUrl, branch);
+        Util.gitClone(repositoryUrl, branch);
         String clusterDir = Util.initializeClusterDir(clusterDTO.getCloudProvider(), clusterDTO.getClusterName(), clusterDTO.getRegion());
         Map<String, String> variablesMap = Util.createTfvarsVariablesMap(clusterDTO);
         Util.createTfvarsFile(clusterDir, variablesMap);

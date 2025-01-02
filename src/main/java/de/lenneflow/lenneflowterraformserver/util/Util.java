@@ -7,7 +7,6 @@ import de.lenneflow.lenneflowterraformserver.model.Credential;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.SystemUtils;
 import org.eclipse.jgit.api.Git;
-import org.eclipse.jgit.internal.storage.file.FileRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,9 +36,9 @@ public class Util {
     /**
      * To terraform files needed to create a new kubernetes cluster will be saved in a separate directory. In this directory the state
      * of the created infrastructure will also be saved. This function creates this directory and return the path.
-     * @param cloudProvider
-     * @param clusterName
-     * @param region
+     * @param cloudProvider the cloud provider
+     * @param clusterName the name of the cluster
+     * @param region the region where the cluster will be created
      * @return the directory path
      */
     public static String getClusterDir(CloudProvider cloudProvider, String clusterName, String region){
@@ -53,22 +52,19 @@ public class Util {
     /**
      * This function will clone the terraform files from GitHub. If the files are already cloned,
      * it will do a pull to get the all the changes.
-     * @param repositoryUrl
-     * @param branch
-     * @return the path of the directory
+     * @param repositoryUrl the url of the repository
+     * @param branch the branch to clone
      */
-    public static String gitCloneOrUpdate(String repositoryUrl, String branch){
+    public static void gitClone(String repositoryUrl, String branch){
         try {
             String terraformDir = getBaseDir() + File.separator + "Terraform";
-            if(!new File(terraformDir).exists() && new File(terraformDir).mkdirs()){
-                Git.cloneRepository().setURI(repositoryUrl).setBranch(branch).setDirectory(new File(terraformDir)).call();
-            }else{
-                Git git = new Git(new FileRepository(terraformDir));
-                git.revert();
-                git.pull();
-                git.close();
+            if(new File(terraformDir).exists()){
+                FileUtils.deleteDirectory(new File(terraformDir));
             }
-            return terraformDir;
+            if(!new File(terraformDir).mkdirs()){
+                throw new InternalServiceException("Unable to create directory " + terraformDir);
+            }
+            Git.cloneRepository().setURI(repositoryUrl).setBranch(branch).setDirectory(new File(terraformDir)).call();
         } catch (Exception e) {
             throw new InternalServiceException(e.getMessage());
         }

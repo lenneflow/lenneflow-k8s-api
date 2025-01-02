@@ -50,7 +50,7 @@ class ServerControllerTest {
     void setUp() {
         MockitoAnnotations.openMocks(this);
         utilMockedStatic.when(() -> Util.initializeClusterDir(any(), any(), any())).thenReturn("");
-        utilMockedStatic.when(() -> Util.gitCloneOrUpdate(any(), any())).thenReturn("");
+        utilMockedStatic.when(() -> Util.gitClone(any(), any())).thenReturn("");
         utilMockedStatic.when(() -> Util.runCmdCommand(any())).thenReturn(0);
         utilMockedStatic.when(() -> Util.runCmdCommandAndGetOutput(any())).thenReturn("output");
         utilMockedStatic.when(() -> Util.runTerraformCommand(any(), any())).thenReturn(0);
