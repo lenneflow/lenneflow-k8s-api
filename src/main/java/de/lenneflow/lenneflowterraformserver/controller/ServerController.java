@@ -77,25 +77,35 @@ public class ServerController {
         if (foundCluster != null) {
             throw new PayloadNotValidException("Cluster already exists");
         }
-        Cluster cluster = createDBTables(clusterDTO);
-        Util.gitClone(repositoryUrl, branch);
-        String clusterDir = Util.initializeClusterDir(clusterDTO.getCloudProvider(), clusterDTO.getClusterName(), clusterDTO.getRegion());
-        Map<String, String> variablesMap = Util.createTfvarsVariablesMap(clusterDTO);
-        Util.createTfvarsFile(clusterDir, variablesMap);
-        new Thread(() -> executeTerraformCreationCommands(cluster, clusterDir, false, null)).start();
-        return cluster;
+        try {
+            Cluster cluster = createDBTables(clusterDTO);
+            Util.gitClone(repositoryUrl, branch);
+            String clusterDir = Util.initializeClusterDir(clusterDTO.getCloudProvider(), clusterDTO.getClusterName(), clusterDTO.getRegion());
+            Map<String, String> variablesMap = Util.createTfvarsVariablesMap(clusterDTO);
+            Util.createTfvarsFile(clusterDir, variablesMap);
+            new Thread(() -> executeTerraformCreationCommands(cluster, clusterDir, false, null)).start();
+            return cluster;
+        } catch (Exception e) {
+            throw new InternalServiceException( "Cluster creation error" + e.getMessage());
+        }
+
     }
 
     @PostMapping("/cluster/update")
     public Cluster updateNodeGroup(@RequestBody NodeGroupDTO nodeGroupDTO) {
-        Validator.validateNodeGroup(nodeGroupDTO);
-        String clusterDir = Util.initializeClusterDir(nodeGroupDTO.getCloudProvider(), nodeGroupDTO.getClusterName(), nodeGroupDTO.getRegion());
-        Cluster cluster = clusterRepository.findByCloudProviderAndClusterNameAndRegion(nodeGroupDTO.getCloudProvider(), nodeGroupDTO.getClusterName(), nodeGroupDTO.getRegion());
-        ClusterDTO clusterDTO = createClusterDTO(cluster, nodeGroupDTO);
-        Map<String, String> variablesMap = Util.createTfvarsVariablesMap(clusterDTO);
-        Util.createTfvarsFile(clusterDir, variablesMap);
-        new Thread(() -> executeTerraformCreationCommands(cluster, clusterDir, true, nodeGroupDTO)).start();
-        return cluster;
+        try {
+            Validator.validateNodeGroup(nodeGroupDTO);
+            String clusterDir = Util.initializeClusterDir(nodeGroupDTO.getCloudProvider(), nodeGroupDTO.getClusterName(), nodeGroupDTO.getRegion());
+            Cluster cluster = clusterRepository.findByCloudProviderAndClusterNameAndRegion(nodeGroupDTO.getCloudProvider(), nodeGroupDTO.getClusterName(), nodeGroupDTO.getRegion());
+            ClusterDTO clusterDTO = createClusterDTO(cluster, nodeGroupDTO);
+            Map<String, String> variablesMap = Util.createTfvarsVariablesMap(clusterDTO);
+            Util.createTfvarsFile(clusterDir, variablesMap);
+            new Thread(() -> executeTerraformCreationCommands(cluster, clusterDir, true, nodeGroupDTO)).start();
+            return cluster;
+        } catch (Exception e) {
+            throw new InternalServiceException("Cluster update error" + e.getMessage());
+        }
+
     }
 
     @GetMapping("/cluster/{clusterName}/provider/{cloudProvider}/region/{region}")
@@ -106,31 +116,35 @@ public class ServerController {
 
     @DeleteMapping("/cluster/{clusterName}/provider/{cloudProvider}/region/{region}")
     public void deleteCluster(@PathVariable String clusterName, @PathVariable String region, @PathVariable String cloudProvider) {
-        String clusterDir = Util.initializeClusterDir(CloudProvider.valueOf(cloudProvider), clusterName, region);
-        Cluster cluster = clusterRepository.findByCloudProviderAndClusterNameAndRegion(CloudProvider.valueOf(cloudProvider.toUpperCase()), clusterName, region);
-        if(cluster == null){
-            throw new InternalServiceException("Cluster not found");
-        }
-        new Thread(() -> {
-            try {
-                updateClusterStatus(cluster, ClusterStatus.PLANING_DELETE);
-                if (Util.runTerraformCommand("terraform plan -destroy", clusterDir) != 0) {
-                    updateClusterStatus(cluster, ClusterStatus.ERROR);
-                    throw new InternalServiceException("terraform plan failed");
-                }
-                updateClusterStatus(cluster, ClusterStatus.DELETING);
-                if (Util.runTerraformCommand("terraform apply -destroy -auto-approve -input=false", clusterDir) != 0) {
-                    updateClusterStatus(cluster, ClusterStatus.ERROR);
-                    throw new InternalServiceException("terraform destroy failed");
-                }
-                updateClusterStatus(cluster, ClusterStatus.DELETED);
-                deleteDirectoryAndDBTables(clusterDir, cluster);
-            } catch (Exception e) {
-                Thread.currentThread().interrupt();
-                throw new InternalServiceException(e.getMessage());
+        try {
+            String clusterDir = Util.initializeClusterDir(CloudProvider.valueOf(cloudProvider), clusterName, region);
+            Cluster cluster = clusterRepository.findByCloudProviderAndClusterNameAndRegion(CloudProvider.valueOf(cloudProvider.toUpperCase()), clusterName, region);
+            if(cluster == null){
+                throw new InternalServiceException("Cluster not found");
             }
+            new Thread(() -> {
+                try {
+                    updateClusterStatus(cluster, ClusterStatus.PLANING_DELETE);
+                    if (Util.runTerraformCommand("terraform plan -destroy", clusterDir) != 0) {
+                        updateClusterStatus(cluster, ClusterStatus.ERROR);
+                        throw new InternalServiceException("terraform plan failed");
+                    }
+                    updateClusterStatus(cluster, ClusterStatus.DELETING);
+                    if (Util.runTerraformCommand("terraform apply -destroy -auto-approve -input=false", clusterDir) != 0) {
+                        updateClusterStatus(cluster, ClusterStatus.ERROR);
+                        throw new InternalServiceException("terraform destroy failed");
+                    }
+                    updateClusterStatus(cluster, ClusterStatus.DELETED);
+                    deleteDirectoryAndDBTables(clusterDir, cluster);
+                } catch (Exception e) {
+                    Thread.currentThread().interrupt();
+                    throw new InternalServiceException(e.getMessage());
+                }
 
-        }).start();
+            }).start();
+        } catch (Exception e) {
+            throw new InternalServiceException("Cluster deletion error" + e.getMessage());
+        }
 
     }
 
